@@ -58,7 +58,10 @@ function checkFFmpeg() {
 function findMedia(root) {
   const images = [], videos = [];
   function walk(dir) {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch (e) { console.warn(`  ⚠️  Skipping ${dir}: ${e.message}`); return; }
+    for (const entry of entries) {
       const full = path.join(dir, entry.name);
       const ext  = path.extname(entry.name).toLowerCase();
       if (entry.isDirectory()) walk(full);
