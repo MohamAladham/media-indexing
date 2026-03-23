@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Media Search</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Syne+Mono&family=Inter:wght@300;400&display=swap');
+
+:root {
+  --bg:        #080a0d;
+  --surface:   #10131a;
+  --surface2:  #181c26;
+  --border:    #1e2433;
+  --accent:    #4f9eff;
+  --accent2:   #2d7de8;
+  --gold:      #f0b429;
+  --red:       #ff5c5c;
+  --text:      #dde3f0;
+  --muted:     #5a6480;
+  --r:         10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-weight: 300;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── noise overlay ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none; opacity: .4;
+}
+
+/* ── header ── */
+header {
+  position: relative; z-index: 1;
+  padding: 3.5rem 2rem 2.5rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #0d1220 0%, transparent 100%);
+}
+
+.logo {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: clamp(2.2rem, 6vw, 4rem);
+  letter-spacing: -.03em;
+  line-height: 1;
+  background: linear-gradient(135deg, var(--text) 0%, var(--accent) 60%, var(--gold) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.tagline {
+  margin-top: .5rem;
+  font-family: 'Syne Mono', monospace;
+  font-size: .72rem;
+  letter-spacing: .18em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* ── search ── */
+.search-area {
+  max-width: 680px;
+  margin: 2.5rem auto 0;
+  padding: 0 1rem;
+}
+
+.input-row {
+  display: flex;
+  gap: .6rem;
+  align-items: center;
+}
+
+#query {
+  flex: 1;
+  padding: .9rem 1.2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  font-size: .95rem;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+#query:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #4f9eff1a; }
+#query::placeholder { color: var(--muted); font-weight: 400; }
+
+/* ── filters row ── */
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  margin-top: .9rem;
+  flex-wrap: wrap;
+}
+.filter-label { font-size: .75rem; color: var(--muted); white-space: nowrap; }
+#threshold { accent-color: var(--accent); flex: 1; min-width: 80px; }
+#threshold-val {
+  font-family: 'Syne Mono', monospace;
+  font-size: .78rem;
+  color: var(--accent);
+  min-width: 2.8rem;
+}
+
+.type-pills { display: flex; gap: .4rem; margin-left: auto; }
+.pill {
+  padding: .25rem .8rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  font-family: 'Syne', sans-serif;
+  font-size: .72rem;
+  cursor: pointer;
+  transition: all .2s;
+}
+.pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pill:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+
+/* ── status bar ── */
+#status {
+  text-align: center;
+  padding: 1rem 1rem .5rem;
+  color: var(--muted);
+  font-size: .8rem;
+  position: relative; z-index: 1;
+}
+#status strong { color: var(--accent); font-weight: 600; }
+#status em { color: var(--text); font-style: normal; }
+
+/* ── grid ── */
+#grid {
+  position: relative; z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 3px;
+  padding: 3px 3px 6rem;
+  max-width: 1800px;
+  margin: 0 auto;
+}
+
+/* ── card ── */
+.card {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--surface);
+  animation: fadeIn .3s ease both;
+}
+@keyframes fadeIn { from { opacity:0; transform:scale(.97) } to { opacity:1; transform:scale(1) } }
+
+.card img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transition: transform .4s ease, filter .4s ease;
+  filter: brightness(.88) saturate(.9);
+}
+.card:hover img { transform: scale(1.07); filter: brightness(1) saturate(1.05); }
+
+.card-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, #00000099 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity .3s;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: .7rem;
+}
+.card:hover .card-overlay { opacity: 1; }
+
+.card-name {
+  font-size: .72rem; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-family: 'Syne', sans-serif;
+}
+.card-sub {
+  font-size: .65rem; color: var(--accent);
+  margin-top: .1rem; font-family: 'Syne Mono', monospace;
+}
+
+/* ── badges ── */
+.badge {
+  position: absolute;
+  top: .5rem; left: .5rem;
+  padding: .2rem .5rem;
+  border-radius: 4px;
+  font-family: 'Syne Mono', monospace;
+  font-size: .62rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+.badge-photo { background: #ffffff22; color: #fff; backdrop-filter: blur(4px); }
+.badge-video { background: var(--gold); color: #1a1000; }
+
+.score-badge {
+  position: absolute; top: .5rem; right: .5rem;
+  background: #000000aa;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: 'Syne Mono', monospace;
+  font-size: .62rem;
+  padding: .15rem .4rem;
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+}
+
+/* ── video play icon ── */
+.play-icon {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .3s;
+}
+.card:hover .play-icon { opacity: 1; }
+.play-icon svg { filter: drop-shadow(0 2px 8px #000); }
+
+/* ── empty state ── */
+.empty {
+  grid-column: 1/-1;
+  text-align: center;
+  padding: 6rem 1rem;
+  color: var(--muted);
+}
+.empty .icon { font-size: 3.5rem; margin-bottom: 1rem; }
+.empty p { max-width: 380px; margin: .5rem auto; line-height: 1.7; }
+
+/* ── loader screen ── */
+#loader-wrap {
+  position: relative; z-index: 1;
+  max-width: 480px;
+  margin: 4rem auto 0;
+  padding: 0 1.5rem;
+  text-align: center;
+}
+#drop-zone {
+  border: 1.5px dashed var(--border);
+  border-radius: var(--r);
+  padding: 3.5rem 2rem;
+  cursor: pointer;
+  transition: border-color .25s, background .25s;
+  background: var(--surface);
+}
+#drop-zone:hover, #drop-zone.drag-over {
+  border-color: var(--accent);
+  background: #4f9eff08;
+}
+#drop-zone .dz-icon { font-size: 3rem; margin-bottom: .8rem; }
+#drop-zone h3 {
+  font-family: 'Syne', sans-serif; font-weight: 700;
+  font-size: 1.1rem; color: var(--text); margin-bottom: .5rem;
+}
+#drop-zone p { color: var(--muted); font-size: .85rem; line-height: 1.6; }
+#drop-zone strong { color: var(--accent); }
+#file-input { display: none; }
+.btn {
+  display: inline-block; margin-top: 1.4rem;
+  padding: .75rem 1.8rem;
+  background: var(--accent); color: #fff;
+  border: none; border-radius: 999px;
+  font-family: 'Syne', sans-serif; font-weight: 600; font-size: .88rem;
+  cursor: pointer; transition: background .2s, transform .1s;
+}
+.btn:hover { background: var(--accent2); }
+.btn:active { transform: scale(.97); }
+
+/* ── lightbox ── */
+#lightbox {
+  display: none;
+  position: fixed; inset: 0; z-index: 200;
+  background: #000000f0;
+  align-items: center; justify-content: center;
+  flex-direction: column; gap: 1rem;
+  padding: 2rem;
+  animation: lbIn .2s ease;
+}
+@keyframes lbIn { from { opacity:0 } to { opacity:1 } }
+#lightbox.open { display: flex; }
+
+#lightbox-media-wrap {
+  max-width: min(90vw, 1000px);
+  max-height: 78vh;
+  position: relative;
+}
+#lightbox-img {
+  max-width: 100%; max-height: 78vh;
+  object-fit: contain;
+  border-radius: var(--r);
+  display: block;
+}
+#lightbox-video {
+  max-width: 100%; max-height: 78vh;
+  border-radius: var(--r);
+  display: none;
+  outline: none;
+}
+
+#lightbox-info {
+  color: var(--muted);
+  font-size: .82rem;
+  text-align: center;
+  max-width: 600px;
+  line-height: 1.7;
+}
+#lightbox-info strong { color: var(--text); font-family: 'Syne', sans-serif; }
+#lightbox-info .path {
+  font-family: 'Syne Mono', monospace; font-size: .7rem;
+  word-break: break-all; color: var(--muted); margin-top: .3rem;
+  display: block;
+}
+
+#lightbox-close {
+  position: fixed; top: 1.2rem; right: 1.5rem;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--muted); font-size: 1.1rem;
+  width: 2.4rem; height: 2.4rem; border-radius: 50%;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: color .2s, border-color .2s;
+}
+#lightbox-close:hover { color: var(--text); border-color: var(--accent); }
+
+/* ── timestamp chips ── */
+.ts-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .6rem; justify-content: center; }
+.ts-chip {
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--accent); font-family: 'Syne Mono', monospace;
+  font-size: .7rem; padding: .2rem .6rem; border-radius: 999px;
+  cursor: pointer; transition: background .2s;
+}
+.ts-chip:hover { background: var(--accent); color: #fff; }
+.ts-chip.active { background: var(--gold); border-color: var(--gold); color: #1a1000; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Media Indexing</div>
+  <div class="tagline">Photos &amp; Videos · CLIP-powered · Fully local</div>
+
+  <div class="search-area">
+    <div class="input-row">
+      <input id="query" type="text"
+        placeholder="sons at the beach · birthday 2023 · mountain sunset…"
+        autocomplete="off" spellcheck="false"/>
+    </div>
+    <div class="filters">
+      <span class="filter-label">similarity</span>
+      <input id="threshold" type="range" min="0.1" max="0.4" step="0.01" value="0.22"/>
+      <span id="threshold-val">0.22</span>
+
+      <div class="type-pills">
+        <button class="pill active" data-type="all">All</button>
+        <button class="pill" data-type="photo">📸 Photos</button>
+        <button class="pill" data-type="video">🎬 Videos</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div id="status"></div>
+
+<div id="loader-wrap">
+  <div id="drop-zone">
+    <div class="dz-icon">🗂️</div>
+    <h3>Load your media index</h3>
+    <p>Drop <strong>media_db.json</strong> here<br>generated by <strong>index_media.js</strong></p>
+    <button class="btn" onclick="document.getElementById('file-input').click()">Choose File</button>
+  </div>
+  <input id="file-input" type="file" accept=".json"/>
+</div>
+
+<div id="grid" style="display:none"></div>
+
+<!-- lightbox -->
+<div id="lightbox">
+  <button id="lightbox-close">✕</button>
+  <div id="lightbox-media-wrap">
+    <img id="lightbox-img" src="" alt=""/>
+    <video id="lightbox-video" controls playsinline></video>
+  </div>
+  <div id="lightbox-info">
+    <div id="lb-title"></div>
+    <div id="lb-timestamps" class="ts-chips"></div>
+    <span id="lb-path" class="path"></span>
+  </div>
+</div>
+
+<script type="module">
+// ── state ─────────────────────────────────────────────────────────────────────
+let DB = null, ENTRIES = [], extractor = null;
+let activeType = 'all';
+let debounceTimer;
+
+// ── DB load ───────────────────────────────────────────────────────────────────
+function loadDB(file) {
+  setStatus('⏳ Loading index…');
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      DB = JSON.parse(e.target.result);
+      // flatten: photos → 1 entry, videos → 1 entry per matched frame (stored separately)
+      ENTRIES = Object.entries(DB).map(([filePath, rec]) => ({
+        filePath,
+        type:   rec.type || 'photo',
+        name:   rec.name,
+        folder: rec.folder,
+        // photos: single embedding; videos: array of { timestamp, embedding, thumb }
+        embedding:  rec.type === 'video' ? null : new Float32Array(rec.embedding || []),
+        frames:     rec.type === 'video' ? rec.frames : null,
+        thumb:      rec.type === 'photo' ? rec.thumb : (rec.frames?.[0]?.thumb || ''),
+        duration:   rec.duration || 0,
+      }));
+      const photos = ENTRIES.filter(e => e.type === 'photo').length;
+      const videos = ENTRIES.filter(e => e.type === 'video').length;
+      document.getElementById('loader-wrap').style.display = 'none';
+      document.getElementById('grid').style.display = 'grid';
+      setStatus(`📦 <strong>${photos}</strong> photos + <strong>${videos}</strong> videos — start typing`);
+      document.getElementById('query').focus();
+    } catch(err) { setStatus(`❌ Parse error: ${err.message}`); }
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById('file-input').addEventListener('change', e => { if (e.target.files[0]) loadDB(e.target.files[0]); });
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); if (e.dataTransfer.files[0]) loadDB(e.dataTransfer.files[0]); });
+
+// ── transformers.js text encoder ─────────────────────────────────────────────
+async function loadExtractor() {
+  if (extractor) return extractor;
+  const { AutoTokenizer, CLIPTextModelWithProjection } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1/dist/transformers.min.js');
+  setStatus('⏳ Loading text encoder (~40 MB, one time)…');
+  const [tokenizer, model] = await Promise.all([
+    AutoTokenizer.from_pretrained('Xenova/clip-vit-base-patch32'),
+    CLIPTextModelWithProjection.from_pretrained('Xenova/clip-vit-base-patch32'),
+  ]);
+  extractor = { tokenizer, model };
+  return extractor;
+}
+
+async function getTextEmbedding(text) {
+  const { tokenizer, model } = await loadExtractor();
+  const inputs = tokenizer(text, { padding: true, truncation: true });
+  const { text_embeds } = await model(inputs);
+  const arr = Array.from(text_embeds.data);
+  const norm = Math.sqrt(arr.reduce((s, v) => s + v * v, 0)) + 1e-8;
+  return new Float32Array(arr.map(v => v / norm));
+}
+
+// ── cosine sim ────────────────────────────────────────────────────────────────
+function cosineSim(a, b) {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-8);
+}
+
+// ── search ────────────────────────────────────────────────────────────────────
+async function search(query) {
+  if (!DB || !query.trim()) {
+    document.getElementById('grid').innerHTML = '';
+    return;
+  }
+  const threshold = parseFloat(document.getElementById('threshold').value);
+  setStatus('🔍 Searching…');
+
+  let textEmb;
+  try { textEmb = await getTextEmbedding(query); }
+  catch(e) { setStatus(`❌ Encoder error: ${e.message}`); return; }
+
+  const results = [];
+
+  for (const entry of ENTRIES) {
+    if (activeType !== 'all' && entry.type !== activeType) continue;
+
+    if (entry.type === 'photo') {
+      if (!entry.embedding?.length) continue;
+      const score = cosineSim(textEmb, entry.embedding);
+      if (score >= threshold) results.push({ ...entry, score, bestThumb: entry.thumb, matchedFrames: null });
+
+    } else if (entry.type === 'video' && entry.frames?.length) {
+      // score every frame, keep best
+      const scored = entry.frames
+        .filter(f => f.embedding?.length)
+        .map(f => ({ ...f, score: cosineSim(textEmb, new Float32Array(f.embedding)) }))
+        .filter(f => f.score >= threshold)
+        .sort((a, b) => b.score - a.score);
+      if (scored.length) {
+        results.push({ ...entry, score: scored[0].score, bestThumb: scored[0].thumb, matchedFrames: scored });
+      }
+    }
+  }
+
+  results.sort((a, b) => b.score - a.score);
+
+  setStatus(results.length
+    ? `✨ <strong>${results.length}</strong> results for "<em>${query}</em>"`
+    : `😕 No results — try different words or lower the similarity slider`);
+
+  renderGrid(results);
+}
+
+// ── render ────────────────────────────────────────────────────────────────────
+function fmtTime(s) {
+  const m = Math.floor(s / 60), sec = s % 60;
+  return `${m}:${String(sec).padStart(2,'0')}`;
+}
+
+function renderGrid(results) {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  if (!results.length) {
+    grid.innerHTML = `<div class="empty"><div class="icon">🔭</div><p>No matches found. Try a different query or lower the similarity threshold.</p></div>`;
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  results.forEach((r, i) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.animationDelay = `${Math.min(i * 20, 300)}ms`;
+    const isVideo = r.type === 'video';
+    card.innerHTML = `
+      <img src="data:image/jpeg;base64,${r.bestThumb}" alt="${r.name}" loading="lazy"/>
+      <div class="card-overlay">
+        <div class="card-name">${r.name}</div>
+        <div class="card-sub">📁 ${r.folder}${isVideo && r.matchedFrames ? ' · ' + r.matchedFrames.length + ' moments' : ''}</div>
+      </div>
+      <div class="badge ${isVideo ? 'badge-video' : 'badge-photo'}">${isVideo ? '▶ VIDEO' : 'PHOTO'}</div>
+      <div class="score-badge">${(r.score*100).toFixed(0)}%</div>
+      ${isVideo ? `<div class="play-icon"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="24" fill="rgba(0,0,0,.5)"/><polygon points="19,14 38,24 19,34" fill="white"/></svg></div>` : ''}`;
+    card.addEventListener('click', () => openLightbox(r));
+    frag.appendChild(card);
+  });
+  grid.appendChild(frag);
+}
+
+// ── lightbox ──────────────────────────────────────────────────────────────────
+function openLightbox(r) {
+  const lb      = document.getElementById('lightbox');
+  const img     = document.getElementById('lightbox-img');
+  const video   = document.getElementById('lightbox-video');
+  const title   = document.getElementById('lb-title');
+  const tsWrap  = document.getElementById('lb-timestamps');
+  const pathEl  = document.getElementById('lb-path');
+
+  if (r.type === 'photo') {
+    img.src   = `file://${r.filePath}`;
+    img.style.display   = 'block';
+    video.style.display = 'none';
+    video.src = '';
+    tsWrap.innerHTML = '';
+    title.innerHTML = `<strong>${r.name}</strong> &nbsp;·&nbsp; 📁 ${r.folder} &nbsp;·&nbsp; ${(r.score*100).toFixed(1)}% match`;
+
+  } else {
+    // video: play the original file, offer timestamp chips to seek
+    img.style.display   = 'none';
+    video.style.display = 'block';
+    video.src = `file://${r.filePath}`;
+    video.controls = true;
+
+    title.innerHTML = `<strong>${r.name}</strong> &nbsp;·&nbsp; 🎬 ${fmtTime(Math.round(r.duration))} &nbsp;·&nbsp; ${(r.score*100).toFixed(1)}% match`;
+
+    tsWrap.innerHTML = '';
+    if (r.matchedFrames?.length) {
+      const label = document.createElement('span');
+      label.style.cssText = 'font-size:.72rem;color:var(--muted);margin-right:.3rem';
+      label.textContent = 'Jump to:';
+      tsWrap.appendChild(label);
+      r.matchedFrames.slice(0, 12).forEach((f, i) => {
+        const chip = document.createElement('button');
+        chip.className = 'ts-chip' + (i === 0 ? ' active' : '');
+        chip.textContent = fmtTime(f.timestamp);
+        chip.addEventListener('click', () => {
+          video.currentTime = f.timestamp;
+          video.play();
+          tsWrap.querySelectorAll('.ts-chip').forEach(c => c.classList.remove('active'));
+          chip.classList.add('active');
+        });
+        tsWrap.appendChild(chip);
+      });
+    }
+  }
+
+  pathEl.textContent = r.filePath;
+  lb.classList.add('open');
+}
+
+document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+document.getElementById('lightbox').addEventListener('click', e => { if (e.target === document.getElementById('lightbox')) closeLightbox(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.getElementById('lightbox-video').pause?.();
+  document.getElementById('lightbox-video').src = '';
+}
+
+// ── type pills ────────────────────────────────────────────────────────────────
+document.querySelectorAll('.pill').forEach(p => {
+  p.addEventListener('click', () => {
+    document.querySelectorAll('.pill').forEach(x => x.classList.remove('active'));
+    p.classList.add('active');
+    activeType = p.dataset.type;
+    const q = document.getElementById('query').value;
+    if (q) search(q);
+  });
+});
+
+// ── controls ──────────────────────────────────────────────────────────────────
+document.getElementById('query').addEventListener('input', e => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => search(e.target.value), 400);
+});
+document.getElementById('threshold').addEventListener('input', e => {
+  document.getElementById('threshold-val').textContent = parseFloat(e.target.value).toFixed(2);
+  const q = document.getElementById('query').value;
+  if (q) search(q);
+});
+
+function setStatus(html) { document.getElementById('status').innerHTML = html; }
+</script>
+</body>
+</html>
